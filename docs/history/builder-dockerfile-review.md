@@ -79,3 +79,60 @@ docker build -t builder -f .devcontainer/builder/Dockerfile .devcontainer/builde
 - `uv sync --frozen`으로 lockfile 기반 재현 가능한 설치
 - Network Volume 영속화 전략으로 pod 재시작 시 재다운로드 최소화
 - 양자화 도구는 미포함 (확인 완료: 모델 수집만 수행, 양자화 불필요)
+
+---
+
+## Docker Hub 배포 및 RunPod Template 연동
+
+### 이미지 내부 파일 구조
+
+```
+Docker Image (Docker Hub에 push)
+├── /app/pyproject.toml        ← COPY로 이미지에 bake
+├── /app/uv.lock               ← COPY로 이미지에 bake
+├── /app/.python-version       ← COPY로 이미지에 bake
+├── /app/.venv/                ← uv sync로 설치된 패키지
+│   └── bin/huggingface-cli    ← PATH에 추가됨
+├── /opt/uv_python/            ← Python 3.12 바이너리
+├── /bin/uv, /bin/uvx          ← uv 바이너리
+└── ollama                     ← Ollama 바이너리
+
+RunPod Network Volume (pod 시작 시 마운트)
+└── /workspace/                ← 영속 저장소
+    ├── ollama_models/         ← Ollama 모델
+    ├── .uv_cache/             ← uv 패키지 캐시
+    └── (사용자 스크립트/데이터)
+```
+
+**핵심**: 코드·의존성은 이미지에 고정, 모델·데이터는 Network Volume에 영속화
+
+### 배포 순서
+
+```bash
+# 1. 빌드 (build context = .devcontainer/builder/)
+docker build -t <DOCKERHUB_USER>/modelling-builder:latest \
+  -f .devcontainer/builder/Dockerfile \
+  .devcontainer/builder/
+
+# 2. Docker Hub 로그인 & Push
+docker login
+docker push <DOCKERHUB_USER>/modelling-builder:latest
+```
+
+### RunPod Template Override 설정
+
+| 항목 | 값 |
+|------|-----|
+| Container Image | `<DOCKERHUB_USER>/modelling-builder:latest` |
+| Docker Command | (비워두거나 `bash`) |
+| Volume Mount Path | `/workspace` |
+| Expose Ports | 필요 시 `11434` (Ollama) |
+
+### Pod 시작 후 사용 예시
+
+```bash
+# PATH에 /app/.venv/bin 포함 → 바로 사용 가능
+huggingface-cli download meta-llama/Llama-3-8B --local-dir /workspace/models/llama3-8b
+ollama pull llama3
+python -c "from datasets import load_dataset; ds = load_dataset('squad')"
+```
