@@ -2,15 +2,21 @@
 # Builder Pod: 저비용 CPU pod — 모델 수집 및 평가 파이프라인 준비
 # RunPod Network Volume (/workspace) 에 모델·캐시·스크립트를 영속 저장
 # ============================================================
-FROM runpod/base:0.7.4-dev-ubuntu2204
+FROM ubuntu:22.04
 
-# ── 1. 시스템 의존성 (단일 레이어) ───────────────────────────
+
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /app
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
     git \
     git-lfs \
     wget \
     curl \
+    && git lfs install \
     && rm -rf /var/lib/apt/lists/*
+    
 
 # ── 2. Ollama 설치 (LLM 서버 및 모델 관리) ──────────────────
 RUN curl -fsSL https://ollama.com/install.sh | sh
@@ -26,7 +32,9 @@ COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /uvx /bin/
 ENV UV_CACHE_DIR=/workspace/.uv_cache \
     UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
-    UV_PYTHON_INSTALL_DIR=/opt/uv_python
+    UV_PYTHON_INSTALL_DIR=/opt/uv_python \
+    OLLAMA_MODELS=/workspace/ollama_models \
+    HF_HOME=/workspace/.cache/huggingface
 
 # ── 5. Python 3.12 설치 (프로젝트 .python-version 과 일치) ──
 RUN uv python install 3.12
@@ -36,8 +44,8 @@ COPY pyproject.toml uv.lock .python-version /app/
 WORKDIR /app
 RUN uv sync --frozen --no-dev
 
-# ── 7. Ollama 모델 저장 경로 → Network Volume ───────────────
-ENV OLLAMA_MODELS=/workspace/ollama_models
+# ── 7. Hugging Face CLI 설치 (모델 다운로드용) ────────────────
+RUN uv pip install huggingface-hub[cli]
 
 # ── 8. venv 의 bin을 PATH에 추가 → huggingface-cli 등 직접 사용
 ENV PATH="/app/.venv/bin:$PATH"

@@ -1,0 +1,44 @@
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[codz]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# IDE / Editor
+.vscode/
+.idea/
+.cursor*/
+
+# Environment
+.env
+.envrc
+
+# Testing / Linting
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Documentation
+docs/
+README.md
+
+# Agent / Dev tooling
+.agent/
+.devcontainer/
+
+# Docker
+.dockerignore
+Dockerfile
+
+# directory 
+.agent
