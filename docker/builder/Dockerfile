@@ -14,13 +14,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git-lfs \
     wget \
     curl \
-    zstd \
     && git lfs install \
     && rm -rf /var/lib/apt/lists/*
     
 
-# ── 2. Ollama 설치 (LLM 서버 및 모델 관리) ──────────────────
-RUN curl -fsSL https://ollama.com/install.sh | sh
+# ── 2. Ollama (CPU 전용 — CUDA/ROCm/Vulkan 라이브러리 제외) ───
+#   /bin/ollama          : 바이너리 (38MB)
+#   /usr/lib/ollama/lib* : CPU runner + base (~6MB)
+#   제외: cuda_v12(2.4GB), cuda_v13(932MB), mlx_cuda_v13(1.5GB), vulkan(55MB)
+COPY --from=ollama/ollama:0.16.1 /bin/ollama /usr/local/bin/ollama
+COPY --from=ollama/ollama:0.16.1 /usr/lib/ollama/libggml-base.so* /usr/lib/ollama/
+COPY --from=ollama/ollama:0.16.1 /usr/lib/ollama/libggml-cpu-*.so /usr/lib/ollama/
 
 # ── 3. uv 바이너리 (버전 고정으로 재현 가능한 빌드) ─────────
 COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /uvx /bin/
@@ -45,10 +49,7 @@ COPY docker/builder/pyproject.toml docker/builder/uv.lock docker/builder/.python
 WORKDIR /app
 RUN uv sync --frozen --no-dev
 
-# ── 7. Hugging Face CLI 설치 (모델 다운로드용) ────────────────
-RUN uv pip install huggingface-hub[cli]
 
-# ── 8. venv 의 bin을 PATH에 추가 → huggingface-cli 등 직접 사용
 ENV PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /workspace

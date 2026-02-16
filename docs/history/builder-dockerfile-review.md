@@ -58,6 +58,18 @@ LLM 모델 수집(Ollama/HuggingFace)과 평가 파이프라인 준비를 담당
 docker build -t builder -f docker/builder/Dockerfile .
 ```
 
+### Phase 3: 이미지 경량화
+
+**문제**: `ollama install.sh`가 CUDA v11(943MB), CUDA v12(1.2GB), ROCm(440MB)을 자동 다운로드 → 이미지 8.97GB
+**원인**: install 스크립트가 GPU 유무와 관계없이 모든 runner를 번들링
+
+**변경:**
+
+- `RUN curl -fsSL https://ollama.com/install.sh | sh` → `COPY --from=ollama/ollama /bin/ollama /usr/local/bin/ollama`
+- 공식 이미지에서 바이너리만 복사, CUDA/ROCm runner 제외
+- `accelerate` 의존성 제거 → `torch` + NVIDIA Python 패키지 27개 제거 (78 → 51 패키지)
+- `zstd` apt 패키지 제거 (install.sh 압축 해제용이었음)
+
 ---
 
 ## Builder Pod 라이브러리

@@ -514,6 +514,7 @@ dependencies = [
 requires-dist = [
     { name = "datasets" },
     { name = "huggingface-hub" },
+    { name = "huggingface-hub", extras = ["cli"] },
     { name = "safetensors" },
     { name = "sentencepiece" },
     { name = "transformers" },
