@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git-lfs \
     wget \
     curl \
+    zstd \
     && git lfs install \
     && rm -rf /var/lib/apt/lists/*
     

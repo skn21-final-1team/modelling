@@ -66,10 +66,12 @@ docker build -t builder -f docker/builder/Dockerfile .
 |--------|------|
 | `huggingface-hub` | `huggingface-cli`로 모델 다운로드 |
 | `transformers` | 모델 구조 검사, 토크나이저, 포맷 변환 |
-| `accelerate` | 대용량 모델 효율적 로딩/분할 |
 | `safetensors` | `.safetensors` 포맷 지원 |
 | `sentencepiece` | LLaMA 계열 등 LLM 토크나이저 |
 | `datasets` | HuggingFace 평가 데이터셋 다운로드 |
+
+> `accelerate`는 `torch` → NVIDIA CUDA 라이브러리(~2.5GB)를 전이 의존성으로 끌어오므로 제거.
+> builder pod은 모델 다운로드만 담당하므로 GPU 라이브러리 불필요.
 
 ---
 
