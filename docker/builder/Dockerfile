@@ -40,7 +40,7 @@ ENV UV_CACHE_DIR=/workspace/.uv_cache \
 RUN uv python install 3.12
 
 # ── 6. 의존성 설치 (pyproject.toml + uv.lock 기반) ──────────
-COPY pyproject.toml uv.lock .python-version /app/
+COPY docker/builder/pyproject.toml docker/builder/uv.lock docker/builder/.python-version /app/
 WORKDIR /app
 RUN uv sync --frozen --no-dev
 

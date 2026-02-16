@@ -1,7 +1,7 @@
 # Builder Pod Dockerfile 검토 및 개선
 
 - **작업일**: 2026-02-12
-- **대상 파일**: `.devcontainer/builder/Dockerfile`
+- **대상 파일**: `docker/builder/Dockerfile`
 - **브랜치**: `feat/add-basemodel`
 
 ---
@@ -43,18 +43,19 @@ LLM 모델 수집(Ollama/HuggingFace)과 평가 파이프라인 준비를 담당
 **목적**: builder pod 의존성을 루트 프로젝트와 완전히 분리
 
 **신규 파일:**
-- `.devcontainer/builder/pyproject.toml` — builder pod 전용 의존성 선언
-- `.devcontainer/builder/.python-version` — Python 3.12 명시
-- `.devcontainer/builder/uv.lock` — `uv lock`으로 78개 패키지 resolve
+- `docker/builder/pyproject.toml` — builder pod 전용 의존성 선언
+- `docker/builder/.python-version` — Python 3.12 명시
+- `docker/builder/uv.lock` — `uv lock`으로 78개 패키지 resolve
 
 **Dockerfile 변경:**
-- `uv tool install` 2개 → `COPY pyproject.toml uv.lock .python-version` + `uv sync --frozen --no-dev`
+
+- `uv tool install` 2개 → `COPY docker/builder/pyproject.toml docker/builder/uv.lock docker/builder/.python-version` + `uv sync --frozen --no-dev`
 - `/app`에 의존성 설치 후 `PATH`에 `/app/.venv/bin` 추가
 - `UV_PYTHON_INSTALL_DIR`을 `/opt/uv_python`으로 변경 (이미지 내 고정)
 
-**빌드 방법** (build context = `.devcontainer/builder/`):
+**빌드 방법** (build context = `.`):
 ```bash
-docker build -t builder -f .devcontainer/builder/Dockerfile .devcontainer/builder/
+docker build -t builder -f docker/builder/Dockerfile .
 ```
 
 ---
@@ -109,10 +110,10 @@ RunPod Network Volume (pod 시작 시 마운트)
 ### 배포 순서
 
 ```bash
-# 1. 빌드 (build context = .devcontainer/builder/)
+# 1. 빌드 (build context = .)
 docker build -t <DOCKERHUB_USER>/modelling-builder:latest \
-  -f .devcontainer/builder/Dockerfile \
-  .devcontainer/builder/
+  -f docker/builder/Dockerfile \
+  .
 
 # 2. Docker Hub 로그인 & Push
 docker login
