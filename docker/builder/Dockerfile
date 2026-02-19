@@ -56,14 +56,12 @@ ENV PATH="/app/.venv/bin:$PATH"
 # ── 7. SSH 서버 설정 (Remote-SSH / SFTP 접속용) ──────────────
 RUN mkdir -p /run/sshd \
     && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
-    && ssh-keygen -A
-
-COPY docker/builder/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config \
+    && ssh-keygen -A \
+    && echo "root:root" | chpasswd
 
 EXPOSE 22
 
 WORKDIR /workspace
 
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["tail", "-f", "/dev/null"]
+CMD bash -c 'if [ -n "$SSH_PASSWORD" ]; then echo "root:$SSH_PASSWORD" | chpasswd; fi && /usr/sbin/sshd && exec tail -f /dev/null'
