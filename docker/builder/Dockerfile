@@ -54,4 +54,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /workspace
 
-CMD ["bash"]
+CMD ["tail", "-f", "/dev/null"]
