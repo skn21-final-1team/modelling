@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git-lfs \
     wget \
     curl \
+    openssh-server \
     && git lfs install \
     && rm -rf /var/lib/apt/lists/*
     
@@ -52,6 +53,17 @@ RUN uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH"
 
+# ── 7. SSH 서버 설정 (Remote-SSH / SFTP 접속용) ──────────────
+RUN mkdir -p /run/sshd \
+    && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
+    && ssh-keygen -A
+
+COPY docker/builder/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 22
+
 WORKDIR /workspace
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["tail", "-f", "/dev/null"]
