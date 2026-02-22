@@ -16,7 +16,7 @@ import requests
 from bs4 import BeautifulSoup
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-RAW_DATA_PATH = BASE_DIR / "data" / "raw" / "raw.csv"
+RAW_DATA_PATH = BASE_DIR / "data" / "raw" / "raw_v2.csv"
 
 HEADERS = {
     "User-Agent": (
@@ -36,7 +36,7 @@ TARGET_URLS = [
     "https://ko.wikipedia.org/wiki/%EA%B8%B0%EA%B3%84_%ED%95%99%EC%8A%B5",
     "https://ko.wikipedia.org/wiki/%EC%9E%90%EC%97%B0%EC%96%B4_%EC%B2%98%EB%A6%AC",
     "https://ko.wikipedia.org/wiki/%EB%94%A5_%EB%9F%AC%EB%8B%9D",
-    "https://ko.wikipedia.org/wiki/%ED%8A%B8%EB%9E%9C%EC%8A%A4%ED%8F%AC%EB%A8%B8_(%EA%B8%B0%EA%B3%84_%ED%95%99%EC%8A%B5_%EB%AA%A8%EB%8D%B8)",
+    "https://ko.wikipedia.org/wiki/%ED%8A%B8%EB%9E%9C%EC%8A%A4%ED%8F%AC%EB%A8%B8_(%EB%AA%A8%EB%8D%B8)",
     "https://ko.wikipedia.org/wiki/%EB%8C%80%ED%98%95_%EC%96%B8%EC%96%B4_%EB%AA%A8%EB%8D%B8",
     "https://ko.wikipedia.org/wiki/%EC%BB%B4%ED%93%A8%ED%84%B0_%EB%B9%84%EC%A0%84",
     "https://ko.wikipedia.org/wiki/%EA%B0%95%ED%99%94_%ED%95%99%EC%8A%B5",
@@ -79,6 +79,14 @@ def extract_text_from_html(html: str, url: str) -> tuple[str, str]:
             for unwanted in content_div.find_all("div", {"id": "toc"}):
                 unwanted.decompose()
             for unwanted in content_div.find_all("table", class_="ambox"):
+                unwanted.decompose()
+            # 빨간 링크 (존재하지 않는 문서 링크) 제거
+            for unwanted in content_div.find_all(
+                "a", attrs={"rel": "mw:WikiLink", "class": "new"},
+            ):
+                unwanted.decompose()
+            # 각주/참조 목록 제거
+            for unwanted in content_div.find_all("div", class_="reflist"):
                 unwanted.decompose()
 
             paragraphs = content_div.find_all(["p", "h2", "h3", "h4", "li"])
