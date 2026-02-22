@@ -43,9 +43,12 @@ RUN uv sync --frozen --no-dev
 ENV PATH="/workspace/.venv/bin:$PATH"
 
 # ── 6. 스크립트 및 설정 파일 ─────────────────────────────────
-COPY utils/model-pulling.py utils/model-calling.py utils/model-testing.py /workspace/scripts/
+COPY utils/model-pulling.py utils/model-calling.py utils/model-testing.py utils/model-validation.py /workspace/scripts/
 COPY utils/env.sh /workspace/scripts/
 
+# ── 6-1. LLM-as-a-Judge 평가 데이터셋 ────────────────────────
+#   model-validation.py 가 Path(__file__).parent.parent / "data/processed/..." 로 참조
+COPY data/processed/processed_v3.csv /workspace/data/processed/processed_v3.csv
 # ── 7. SSH 서버 설정 (Remote-SSH / SFTP 접속용) ──────────────
 RUN mkdir -p /run/sshd \
     && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
