@@ -13,4 +13,7 @@ dependencies = [
     "datasets",
     "requests",
     "dotenv>=0.9.9",
+    "psutil",
+    "nvidia-ml-py",
+    "rich",
 ]
