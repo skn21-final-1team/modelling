@@ -23,7 +23,8 @@ RunPod GPU Pod 에서 OpenLLM 서빙 및 모델 평가를 수행하기 위한 �
 ```
 /workspace/modelling/
 ├── utils/
-│   ├── env.sh                 # 환경변수 (HF_TOKEN, HF_HOME 등)
+│   ├── config.py              # HFConfig — .env 로딩 및 Python 설정 객체
+│   ├── env.sh                 # 환경변수 (HF_TOKEN, HF_HOME 등) — shell 전용
 │   ├── make-data.py           # raw 데이터 → LLM-as-Judge 테스트 데이터 변환
 │   ├── model-pulling.py       # HuggingFace 모델 다운로드
 │   ├── model-calling.py       # vLLM API 단일 호출
@@ -32,6 +33,7 @@ RunPod GPU Pod 에서 OpenLLM 서빙 및 모델 평가를 수행하기 위한 �
 ├── data/
 │   ├── raw/                   # 크롤링 원본 데이터
 │   └── processed/             # 전처리된 Q&A 데이터셋
+├── .env                       # 시크릿 (HF_TOKEN 등) — git 미추적
 ├── pyproject.toml             # 프로젝트 의존성 정의
 ├── uv.lock                    # 의존성 잠금 파일
 └── .python-version            # Python 3.12
@@ -57,14 +59,55 @@ uv sync --frozen --no-dev
 
 ## Step 2. 환경변수 설정
 
+### 2-1. .env 파일 준비
+
+프로젝트 루트에 `.env` 파일을 생성하고 HuggingFace 토큰을 기입합니다.
+
+```bash
+# /workspace/modelling/.env
+HF_TOKEN=hf_YOUR_TOKEN_HERE
+```
+
+> `.env`는 `.gitignore`에 추가하여 토큰이 원격 저장소에 올라가지 않도록 합니다.
+
+### 2-2. Shell 환경변수 적용
+
 ```bash
 source utils/env.sh
 ```
 
-설정되는 변수:
-- `HF_TOKEN` — HuggingFace 인증 토큰 (gated model 접근용)
-- `HF_HUB_ENABLE_HF_TRANSFER=1` — Rust 기반 고속 다운로더 활성화
-- `HF_HOME` — 모델 캐시 디렉토리 (`/workspace/.cache/huggingface`)
+`env.sh`는 프로젝트 루트의 `.env`를 자동으로 로딩한 뒤 아래 변수를 export 합니다.
+
+| 변수 | 값 | 설명 |
+|---|---|---|
+| `HF_TOKEN` | `.env` 또는 RunPod 환경변수 | HuggingFace 인증 토큰 |
+| `HUGGING_FACE_HUB_TOKEN` | `HF_TOKEN`과 동일 | 구버전 라이브러리 호환용 |
+| `HF_HUB_ENABLE_HF_TRANSFER` | `1` | Rust 기반 고속 다운로더 활성화 |
+| `HF_HOME` | `/workspace/.cache/huggingface` | 모델 캐시 루트 디렉토리 |
+| `TRANSFORMERS_CACHE` | `$HF_HOME/hub` | transformers 모델 캐시 |
+| `HF_DATASETS_CACHE` | `$HF_HOME/datasets` | datasets 캐시 |
+
+> RunPod에서 Pod 환경변수로 `HF_TOKEN`을 주입한 경우, `.env` 없이도 동작합니다.
+
+### 2-3. Python에서 설정 사용
+
+Python 스크립트에서는 `utils/config.py`의 `hf_config` 객체로 동일한 설정을 가져올 수 있습니다.
+
+```python
+from utils.config import hf_config
+
+print(hf_config.HF_TOKEN)               # HuggingFace 토큰
+print(hf_config.HF_HOME)                # 캐시 디렉토리 경로
+print(hf_config.HF_HUB_ENABLE_HF_TRANSFER)  # True
+```
+
+`HFConfig`는 `pydantic_settings.BaseSettings` 기반으로, 아래 순서로 값을 결정합니다.
+
+```
+환경변수 (export) > .env 파일 > 클래스 기본값
+```
+
+따라서 RunPod 환경변수 주입, `.env` 파일, 코드 기본값 세 가지 방식 모두 지원합니다.
 
 ## Step 3. 모델 다운로드
 
@@ -81,8 +124,24 @@ python utils/model-pulling.py --model LGAI-EXAONE/EXAONE-4.0-32B-FP8
 ```bash
 vllm serve LGAI-EXAONE/EXAONE-4.0-32B-FP8 \
     --host 0.0.0.0 \
-    --port 8000 &
+    --port 8000 \
+    --cpu-offload-gb 4 \
+    --max-model-len 4096 \
+    --enforce-eager \
+    --gpu-memory-utilization 0.95 &
 ```
+
+| 옵션 | 값 | 설명 |
+|---|---|---|
+| `--cpu-offload-gb` | `4` | 모델 가중치 4 GB를 CPU RAM으로 오프로드하여 VRAM 확보 |
+| `--max-model-len` | `4096` | 최대 컨텍스트 길이 제한 (KV cache 메모리 절약) |
+| `--enforce-eager` | - | CUDA graph 비활성화 (그래프 캡처용 추가 메모리 절약) |
+| `--gpu-memory-utilization` | `0.95` | GPU 메모리 사용 비율 상향 (기본값 0.9) |
+
+> **왜 이 옵션이 필요한가?**
+> EXAONE-4.0-32B-FP8은 FP8 양자화 상태에서도 가중치가 ~31 GB입니다.
+> RTX 5090(32 GB VRAM) 한 장에서는 가중치만으로 VRAM이 거의 꽉 차므로,
+> CPU 오프로딩 없이는 모델 로딩 자체가 실패합니다 (`torch.OutOfMemoryError`).
 
 서버가 `Ready` 로그를 출력할 때까지 대기합니다 (약 1~3분).
 
@@ -142,6 +201,58 @@ python utils/model-validation.py --sample-size 10
 
 ---
 
+## 트러블슈팅: CUDA Out of Memory
+
+### 증상
+
+`vllm serve` 실행 시 아래와 같은 에러가 발생하며 서버가 기동되지 않음:
+
+```
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate X MiB.
+```
+
+### 원인
+
+EXAONE-4.0-32B-FP8은 FP8(1 byte/param) 양자화에도 가중치가 ~31 GB를 차지합니다.
+단일 GPU의 VRAM이 이를 수용하지 못하면 모델 로딩 단계에서 OOM이 발생합니다.
+
+### GPU별 권장 설정
+
+| GPU (VRAM) | `--cpu-offload-gb` | `--max-model-len` | `--enforce-eager` | `--gpu-memory-utilization` | 비고 |
+|---|---|---|---|---|---|
+| RTX 5090 (32 GB) | `4` | `4096` | 필수 | `0.95` | CPU 오프로딩 필수 |
+| A100 (40 GB) | `0` | `16384` | 선택 | `0.9` | 오프로딩 없이 서빙 가능 |
+| A100 (80 GB) | `0` | `131072` | 불필요 | `0.9` | 풀 컨텍스트 사용 가능 |
+| H100 (80 GB) | `0` | `131072` | 불필요 | `0.9` | 풀 컨텍스트 사용 가능 |
+
+> `--max-model-len`을 줄이면 KV cache 메모리가 줄어들어 동시 처리 가능한 토큰 수가 감소합니다.
+> 평가 목적이라면 `4096`~`8192`로도 충분합니다.
+
+### 대안 모델
+
+VRAM이 부족하여 CPU 오프로딩으로도 성능이 불만족스러운 경우, 더 작은 모델을 고려하세요.
+
+| 모델 | 파라미터 | 필요 VRAM (추정) | 비고 |
+|---|---|---|---|
+| `LGAI-EXAONE/EXAONE-4.0-32B-FP8` | 32B (FP8) | ~31 GB | 현재 기본 모델 |
+| `LGAI-EXAONE/EXAONE-4.0-7.8B` | 7.8B (FP16) | ~16 GB | 32 GB GPU에 여유롭게 적재 |
+
+모델을 변경할 경우 Step 3~4의 모델 ID를 함께 수정하세요.
+
+### 멀티 GPU 텐서 병렬화
+
+GPU가 2장 이상인 환경에서는 `--tensor-parallel-size`로 모델을 분산 적재할 수 있습니다.
+
+```bash
+# 예시: GPU 2장 사용
+vllm serve LGAI-EXAONE/EXAONE-4.0-32B-FP8 \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --tensor-parallel-size 2
+```
+
+---
+
 ## (참고) 데이터 전처리
 
 테스트 데이터셋을 새로 생성해야 할 경우:
@@ -160,13 +271,23 @@ python utils/make-data.py
 
 ```bash
 cd /workspace/modelling
+
+# 1. 토큰 설정 (.env 미리 준비하거나 RunPod 환경변수로 주입)
+echo "HF_TOKEN=hf_YOUR_TOKEN_HERE" > .env
+
+# 2. 의존성 설치 및 환경변수 적용
 uv sync --frozen --no-dev
 source utils/env.sh
 
+# 3. 모델 다운로드 → 서버 기동
 python utils/model-pulling.py --model LGAI-EXAONE/EXAONE-4.0-32B-FP8
-vllm serve LGAI-EXAONE/EXAONE-4.0-32B-FP8 --host 0.0.0.0 --port 8000 &
-# (서버 Ready 대기)
+vllm serve LGAI-EXAONE/EXAONE-4.0-32B-FP8 \
+    --host 0.0.0.0 --port 8000 \
+    --cpu-offload-gb 4 --max-model-len 4096 \
+    --enforce-eager --gpu-memory-utilization 0.95 &
+# (서버 Ready 로그 확인 후 진행)
 
+# 4. 테스트 및 평가
 python utils/model-testing.py
 python utils/model-validation.py --sample-size 10
 ```
