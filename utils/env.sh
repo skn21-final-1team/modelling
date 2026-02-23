@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Environment variables for HuggingFace model access and download acceleration
-# Usage: source /app/scripts/env.sh
+# Usage: source utils/env.sh  (프로젝트 루트에서 실행)
 
-# HuggingFace authentication token (set via RunPod environment variable or manually)
+# HuggingFace authentication token (set via RunPod environment variable or .env)
+# Create .env with HF_TOKEN=your_token or export HF_TOKEN before sourcing
 export HF_TOKEN="${HF_TOKEN:-}"
 export HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
 

@@ -3,10 +3,10 @@ Model Calling Script
 Sends a single inference request to the vLLM OpenAI-compatible API.
 
 Usage:
-    python /app/scripts/model-calling.py --prompt "Your prompt here" [--base-url http://localhost:8000]
+    python utils/model-calling.py --prompt "Your prompt here" [--base-url http://localhost:8000]
 
 Example:
-    python /app/scripts/model-calling.py --prompt "Explain quantum computing in one paragraph."
+    python utils/model-calling.py --prompt "Explain quantum computing in one paragraph."
 """
 
 import argparse

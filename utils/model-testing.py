@@ -3,7 +3,7 @@ Model Testing Script
 Runs a suite of tests against the vLLM OpenAI-compatible API.
 
 Usage:
-    python /app/scripts/model-testing.py [--base-url http://localhost:8000]
+    python utils/model-testing.py [--base-url http://localhost:8000]
 
 Tests:
     1. Health check (/health)

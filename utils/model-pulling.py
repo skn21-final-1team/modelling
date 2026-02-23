@@ -1,12 +1,12 @@
 """
 Model Pulling Script
-Downloads a HuggingFace model to /workspace for use with vLLM.
+Downloads a HuggingFace model to the local cache for use with vLLM.
 
 Usage:
-    python /app/scripts/model-pulling.py --model <model_id> [--revision <rev>]
+    python utils/model-pulling.py --model <model_id> [--revision <rev>]
 
 Example:
-    python /app/scripts/model-pulling.py --model meta-llama/Llama-3.1-8B-Instruct
+    python utils/model-pulling.py --model meta-llama/Llama-3.1-8B-Instruct
 """
 
 import argparse
@@ -31,7 +31,7 @@ def main():
     token = os.environ.get("HF_TOKEN")
     if not token:
         print("WARNING: HF_TOKEN not set. Gated models will fail to download.")
-        print("Run: source /app/scripts/env.sh")
+        print("Run: source utils/env.sh")
 
     cache_dir = os.environ.get("HF_HOME", "/workspace/.cache/huggingface")
 

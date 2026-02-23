@@ -1,14 +1,15 @@
 [project]
-name = "modelling"
+name = "modelling-testing"
 version = "0.1.0"
-description = "Text chunking, embedding, and retriever service for 1team project"
-readme = "README.md"
+description = "Testing pod: OpenLLM serving and model evaluation on GPU"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.128.7",
-    "langchain-text-splitters>=1.1.0",
-    "pgvector>=0.4.2",
-    "psycopg2-binary>=2.9.11",
-    "python-dotenv>=1.2.1",
-    "uvicorn>=0.40.0",
+    "vllm",
+    "transformers",
+    "huggingface-hub",
+    "hf-transfer",
+    "safetensors",
+    "sentencepiece",
+    "datasets",
+    "requests",
 ]
