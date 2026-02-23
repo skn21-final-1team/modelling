@@ -29,10 +29,12 @@ RunPod GPU Pod 에서 OpenLLM 서빙 및 모델 평가를 수행하기 위한 �
 │   ├── model-pulling.py       # HuggingFace 모델 다운로드
 │   ├── model-calling.py       # vLLM API 단일 호출
 │   ├── model-testing.py       # vLLM API 5종 자동 테스트
-│   └── model-validation.py    # LLM-as-a-Judge 평가 파이프라인
+│   ├── model-validation.py    # LLM-as-a-Judge 평가 파이프라인
+│   └── model-monitoring.py    # GPU/CPU/RAM + vLLM 리소스 모니터링
 ├── data/
 │   ├── raw/                   # 크롤링 원본 데이터
-│   └── processed/             # 전처리된 Q&A 데이터셋
+│   ├── processed/             # 전처리된 Q&A 데이터셋
+│   └── monitoring/            # 리소스 모니터링 CSV 로그
 ├── .env                       # 시크릿 (HF_TOKEN 등) — git 미추적
 ├── pyproject.toml             # 프로젝트 의존성 정의
 ├── uv.lock                    # 의존성 잠금 파일
@@ -288,6 +290,57 @@ vllm serve LGAI-EXAONE/EXAONE-4.0-32B-FP8 \
     --tensor-parallel-size 2
 ```
 
+## Step 8. 리소스 모니터링
+
+vLLM 서빙 중 GPU/CPU/RAM 사용량과 vLLM 서버 메트릭을 실시간 모니터링합니다.
+
+```bash
+python utils/model-monitoring.py
+```
+
+대시보드 + CSV 로깅이 동시에 실행됩니다. `Ctrl+C`로 종료하면 CSV 파일 경로가 출력됩니다.
+
+### 모니터링 항목
+
+| 카테고리 | 메트릭 |
+|---|---|
+| GPU | 사용률(%), VRAM 사용량/전체(GB), 온도(°C), 전력(W) |
+| CPU | 전체 사용률(%), 코어 수 |
+| RAM | 사용량/전체(GB), 사용률(%) |
+| vLLM | 서버 상태, 모델명, 실행/대기 요청 수, KV Cache 사용률, 처리량(tok/s) |
+
+### 옵션
+
+| 옵션 | 기본값 | 설명 |
+|---|---|---|
+| `--interval` | `2` | 폴링 간격 (초) |
+| `--port` | `8000` | vLLM 서버 포트 |
+| `--no-dashboard` | - | 대시보드 비활성화 (CSV 로깅만) |
+| `--no-log` | - | CSV 로깅 비활성화 (대시보드만) |
+| `--log-dir` | `data/monitoring` | CSV 저장 디렉토리 |
+| `--duration` | `0` | 자동 종료 시간 (초, 0 = 무제한) |
+
+### 사용 예시
+
+```bash
+# 모델 평가와 동시에 리소스 모니터링 (별도 터미널)
+python utils/model-monitoring.py --duration 3600
+
+# CSV 로깅만 (백그라운드)
+python utils/model-monitoring.py --no-dashboard --interval 5 &
+
+# 대시보드만 (로그 파일 없이)
+python utils/model-monitoring.py --no-log
+```
+
+### CSV 출력
+
+`data/monitoring/monitor_YYYYMMDD_HHMMSS.csv`에 저장됩니다.
+
+```csv
+timestamp,gpu_util,vram_used_gb,vram_total_gb,gpu_temp,gpu_power_w,cpu_util,ram_used_gb,ram_total_gb,vllm_online,vllm_requests_running,vllm_requests_waiting,vllm_gpu_cache_pct,vllm_cpu_cache_pct,vllm_prompt_tps,vllm_gen_tps
+```
+
 ---
 
 ## (참고) 데이터 전처리
@@ -327,4 +380,7 @@ vllm serve LGAI-EXAONE/EXAONE-4.0-32B-FP8 \
 # 4. 테스트 및 평가
 python utils/model-testing.py
 python utils/model-validation.py --sample-size 10
+
+# 5. 리소스 모니터링 (별도 터미널 또는 백그라운드)
+python utils/model-monitoring.py
 ```
