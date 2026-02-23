@@ -9,7 +9,7 @@ if [ -f "$_ENV_FILE" ]; then
   # shellcheck source=../.env
   source "$_ENV_FILE"
   set +a
-fimodel : `LGAI-EXAONE/EXAONE-4.0-32B-FP8`
+fi
 unset _ENV_FILE
 
 # HuggingFace authentication token (set via RunPod environment variable or .env)

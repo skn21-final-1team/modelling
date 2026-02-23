@@ -10,9 +10,53 @@ Example:
 """
 
 import argparse
+import json
 import sys
+import time
 
 import requests
+
+
+def stream_completion(base_url: str, payload: dict) -> dict:
+    """Stream chat completion and measure latency metrics."""
+    payload["stream"] = True
+    t_start = time.perf_counter()
+    ttft = None
+    full_content = ""
+    completion_tokens = 0
+
+    resp = requests.post(
+        f"{base_url}/v1/chat/completions",
+        json=payload,
+        timeout=120,
+        stream=True,
+    )
+    resp.raise_for_status()
+
+    for raw_line in resp.iter_lines(decode_unicode=True):
+        if not raw_line or not raw_line.startswith("data: "):
+            continue
+        data_str = raw_line[len("data: "):]
+        if data_str.strip() == "[DONE]":
+            break
+
+        chunk = json.loads(data_str)
+        delta = chunk["choices"][0].get("delta", {})
+        token_text = delta.get("content", "")
+        if token_text:
+            if ttft is None:
+                ttft = time.perf_counter() - t_start
+            full_content += token_text
+            completion_tokens += 1
+
+    t_total = time.perf_counter() - t_start
+
+    return {
+        "content": full_content,
+        "ttft_ms": (ttft or 0) * 1000,
+        "total_s": t_total,
+        "completion_tokens": completion_tokens,
+    }
 
 
 def main():
@@ -38,7 +82,6 @@ def main():
     )
     args = parser.parse_args()
 
-    # Auto-detect model name from /v1/models endpoint
     model_name = args.model
     if model_name is None:
         try:
@@ -54,7 +97,6 @@ def main():
             )
             sys.exit(1)
 
-    # Send chat completion request
     payload = {
         "model": model_name,
         "messages": [{"role": "user", "content": args.prompt}],
@@ -63,18 +105,17 @@ def main():
     }
 
     try:
-        resp = requests.post(
-            f"{args.base_url}/v1/chat/completions",
-            json=payload,
-            timeout=120,
-        )
-        resp.raise_for_status()
-        result = resp.json()
-        content = result["choices"][0]["message"]["content"]
-        print(f"\n--- Response ---\n{content}")
+        result = stream_completion(args.base_url, payload)
+
+        print(f"\n--- Response ---\n{result['content']}")
+        print(f"\n--- Latency ---")
+        print(f"TTFT (Time To First Token): {result['ttft_ms']:.1f} ms")
+        print(f"Total time:                 {result['total_s']:.3f} s")
+        if result["completion_tokens"] > 0 and result["total_s"] > 0:
+            tps = result["completion_tokens"] / result["total_s"]
+            print(f"Throughput:                 {tps:.1f} tokens/s")
         print(f"\n--- Usage ---")
-        print(f"Prompt tokens: {result['usage']['prompt_tokens']}")
-        print(f"Completion tokens: {result['usage']['completion_tokens']}")
+        print(f"Completion tokens: {result['completion_tokens']}")
     except requests.ConnectionError:
         print(
             "ERROR: Cannot connect to vLLM server. Start it with:",

@@ -220,13 +220,50 @@ EXAONE-4.0-32B-FP8은 FP8(1 byte/param) 양자화에도 가중치가 ~31 GB를 �
 
 | GPU (VRAM) | `--cpu-offload-gb` | `--max-model-len` | `--enforce-eager` | `--gpu-memory-utilization` | 비고 |
 |---|---|---|---|---|---|
-| RTX 5090 (32 GB) | `4` | `4096` | 필수 | `0.95` | CPU 오프로딩 필수 |
+| RTX 5090 (32 GB) | `4` | `4096` | 필수 | `0.95` | CPU 오프로딩 필수, v1 엔진 패치 필요 |
 | A100 (40 GB) | `0` | `16384` | 선택 | `0.9` | 오프로딩 없이 서빙 가능 |
 | A100 (80 GB) | `0` | `131072` | 불필요 | `0.9` | 풀 컨텍스트 사용 가능 |
 | H100 (80 GB) | `0` | `131072` | 불필요 | `0.9` | 풀 컨텍스트 사용 가능 |
 
 > `--max-model-len`을 줄이면 KV cache 메모리가 줄어들어 동시 처리 가능한 토큰 수가 감소합니다.
 > 평가 목적이라면 `4096`~`8192`로도 충분합니다.
+
+### vLLM 0.11.0 v1 엔진 cpu-offload 패치
+
+vLLM 0.11.0의 v1 엔진은 `--cpu-offload-gb`와 함께 사용 시 아래 에러가 발생할 수 있습니다:
+
+```
+AssertionError: Cannot re-initialize the input batch when CPU weight offloading is enabled.
+```
+
+이 경우 `gpu_model_runner.py`의 assertion을 warning으로 전환하는 패치가 필요합니다:
+
+```bash
+# .venv 내 해당 파일 위치
+RUNNER=".venv/lib/python3.12/site-packages/vllm/v1/worker/gpu_model_runner.py"
+
+# 패치 적용 (assertion → warning + return)
+python -c "
+import re, pathlib
+p = pathlib.Path('$RUNNER')
+src = p.read_text()
+old = '''            assert self.cache_config.cpu_offload_gb == 0, (
+                \"Cannot re-initialize the input batch when CPU weight \"
+                \"offloading is enabled. See https://github.com/vllm-project/vllm/pull/18298 \"  # noqa: E501
+                \"for more details.\")'''
+new = '''            if self.cache_config.cpu_offload_gb != 0:
+                logger.warning(
+                    \"Skipping input batch re-initialization because CPU \"
+                    \"weight offloading is enabled. \"
+                    \"See https://github.com/vllm-project/vllm/pull/18298\")
+                return'''
+p.write_text(src.replace(old, new))
+print('Patched successfully')
+"
+```
+
+> `VLLM_USE_V1=0`(v0 엔진 전환)은 vLLM 0.11.0에서 지원되지 않습니다.
+> 향후 vLLM 버전에서 이 제한이 해결되면 패치 없이 사용할 수 있습니다.
 
 ### 대안 모델
 
