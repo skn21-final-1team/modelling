@@ -1,0 +1,32 @@
+# 기본 설정 - 모든 텍스트 파일 자동 처리
+* text=auto
+
+# 명시적 LF 강제 (크로스 플랫폼)
+*.py    text eol=lf
+*.sh    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+# pyproject.toml 등
+*.toml  text eol=lf
+
+# 바이너리 - diff/merge 시도 안 함
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+# Python 패키지
+*.whl   binary
+
+# Windows 전용
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Jupyter Notebook - diff를 위한 설정
+*.ipynb text eol=lf
