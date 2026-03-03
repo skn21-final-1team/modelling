@@ -21,7 +21,9 @@ source /opt/venvs/modelling/bin/activate
 export UV_LINK_MODE=copy
 export TMPDIR=/tmp
 export VIRTUAL_ENV=/opt/venvs/modelling
-uv sync --python /opt/venvs/modelling/bin/python
+export UV_PROJECT_ENVIRONMENT=/opt/venvs/modelling
+
+uv sync
 
 _ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.env"
 if [ -f "$_ENV_FILE" ]; then
