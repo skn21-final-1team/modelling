@@ -5,6 +5,7 @@
 
 
 # uv가 없으면 설치
+export PATH="$HOME/.local/bin:$PATH"
 command -v uv >/dev/null 2>&1 || {
   curl -LsSf https://astral.sh/uv/install.sh | sh
 }

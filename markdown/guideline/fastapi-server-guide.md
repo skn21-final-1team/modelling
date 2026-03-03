@@ -188,13 +188,53 @@ python -m cli.model_pulling --model LGAI-EXAONE/EXAONE-4.0-32B-FP8
 vllm serve LGAI-EXAONE/EXAONE-4.0-32B-FP8 \
     --host 0.0.0.0 \
     --port 8000 \
-    --cpu-offload-gb 4 \
     --max-model-len 4096 \
     --enforce-eager \
     --gpu-memory-utilization 0.95 &
 ```
 
-서버가 `Ready` 로그를 출력할 때까지 대기합니다 (약 1~3분).
+서버가 `Application startup complete.` 로그를 출력할 때까지 대기합니다 (약 1~3분).
+
+**기동 로그 예시:**
+
+```
+INFO 03-03 07:21:13 [__init__.py:216] Automatically detected platform cuda.
+(APIServer pid=11956) INFO 03-03 07:21:17 [api_server.py:1839] vLLM API server version 0.11.0
+(APIServer pid=11956) INFO 03-03 07:21:18 [model.py:547] Resolved architecture: Exaone4ForCausalLM
+(APIServer pid=11956) INFO 03-03 07:21:18 [model.py:1510] Using max model len 4096
+(APIServer pid=11956) INFO 03-03 07:21:18 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=2048.
+(APIServer pid=11956) INFO 03-03 07:21:18 [__init__.py:381] Cudagraph is disabled under eager mode
+
+(EngineCore_DP0 pid=12117) INFO 03-03 07:21:25 [core.py:77] Initializing a V1 LLM engine (v0.11.0) with config:
+  model='LGAI-EXAONE/EXAONE-4.0-32B-FP8', dtype=torch.bfloat16, max_seq_len=4096,
+  tensor_parallel_size=1, quantization=fp8, enforce_eager=True, enable_prefix_caching=True
+
+(EngineCore_DP0 pid=12117) INFO 03-03 07:21:27 [gpu_model_runner.py:2602] Starting to load model LGAI-EXAONE/EXAONE-4.0-32B-FP8...
+(EngineCore_DP0 pid=12117) INFO 03-03 07:21:27 [cuda.py:366] Using Flash Attention backend on V1 engine.
+
+Loading safetensors checkpoint shards: 100% Completed | 7/7 [00:06<00:00, 1.03it/s]
+
+(EngineCore_DP0 pid=12117) INFO 03-03 07:21:35 [default_loader.py:267] Loading weights took 7.08 seconds
+(EngineCore_DP0 pid=12117) INFO 03-03 07:21:36 [gpu_model_runner.py:2653] Model loading took 30.9891 GiB and 7.776333 seconds
+(EngineCore_DP0 pid=12117) INFO 03-03 07:21:37 [gpu_worker.py:298] Available KV cache memory: 10.31 GiB
+(EngineCore_DP0 pid=12117) INFO 03-03 07:21:37 [kv_cache_utils.py:1087] GPU KV cache size: 42,224 tokens
+(EngineCore_DP0 pid=12117) INFO 03-03 07:21:37 [kv_cache_utils.py:1091] Maximum concurrency for 4,096 tokens per request: 10.28x
+(EngineCore_DP0 pid=12117) INFO 03-03 07:21:37 [core.py:210] init engine (profile, create kv cache, warmup model) took 1.94 seconds
+
+(APIServer pid=11956) INFO 03-03 07:21:39 [api_server.py:1912] Starting vLLM API server 0 on http://0.0.0.0:8000
+(APIServer pid=11956) INFO:     Started server process [11956]
+(APIServer pid=11956) INFO:     Waiting for application startup.
+(APIServer pid=11956) INFO:     Application startup complete.   # ← 이 로그가 나오면 서버 준비 완료
+```
+
+> **주요 확인 포인트:**
+> - `Resolved architecture: Exaone4ForCausalLM` — 모델 아키텍처 인식 확인
+> - `Model loading took 30.9891 GiB` — VRAM 사용량 확인 (L40S 48GB 기준)
+> - `GPU KV cache size: 42,224 tokens` — 추론용 KV cache 할당량
+> - `Maximum concurrency for 4,096 tokens per request: 10.28x` — 동시 처리 가능 요청 수
+> - `Application startup complete.` — 서버 준비 완료 (이 로그 이후 요청 가능)
+
+> **참고:** `Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal!` 경고는 FP8 최적화 설정 파일이 없는 경우 출력되며, 정상 동작에는 영향이 없습니다.
 
 | 옵션 | 값 | 설명 |
 |---|---|---|
