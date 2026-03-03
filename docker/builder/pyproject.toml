@@ -9,5 +9,4 @@ dependencies = [
     "safetensors",
     "sentencepiece",
     "datasets",
-    "huggingface-hub[cli]"
 ]
