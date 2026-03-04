@@ -1,0 +1,12 @@
+[project]
+name = "modelling-builder"
+version = "0.1.0"
+description = "Builder pod: LLM 모델 수집 및 평가 파이프라인 준비"
+requires-python = ">=3.12"
+dependencies = [
+    "huggingface-hub",
+    "transformers",
+    "safetensors",
+    "sentencepiece",
+    "datasets",
+]
