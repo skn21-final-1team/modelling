@@ -20,6 +20,8 @@ source /opt/venvs/modelling/bin/activate
 
 # 안전 모드
 export UV_LINK_MODE=copy
+export UV_CACHE_DIR=/workspace/.uv_cache
+export UV_COMPILE_BYTECODE=1
 export TMPDIR=/tmp
 export VIRTUAL_ENV=/opt/venvs/modelling
 export UV_PROJECT_ENVIRONMENT=/opt/venvs/modelling

@@ -38,15 +38,28 @@ HF_TOKEN=hf_YOUR_TOKEN_HERE
 
 > `.env`는 `.gitignore`에 등록되어 있어 원격 저장소에 커밋되지 않습니다.
 
-### 2-2. Shell 환경변수 적용
+### 2-2. Shell 환경 초기화 (`env.sh`)
 
-HuggingFace 관련 캐시 경로와 고속 다운로더를 활성화합니다.
+`env.sh`는 **venv 생성 → 의존성 설치(`uv sync`) → 환경변수 설정**을 한번에 수행합니다. Pod 최초 기동이나 재시작 후에도 이 한 줄이면 개발 환경이 복구됩니다.
 
 ```bash
 source env.sh
 ```
 
-`env.sh`가 export하는 변수:
+`env.sh`가 수행하는 작업 및 export하는 변수:
+
+**uv / venv 설정:**
+
+| 변수 | 값 | 설명 |
+|---|---|---|
+| `UV_LINK_MODE` | `copy` | FUSE 마운트 호환 (symlink 대신 복사) |
+| `UV_CACHE_DIR` | `/workspace/.uv_cache` | uv 패키지 캐시를 network volume에 영속 저장 |
+| `UV_COMPILE_BYTECODE` | `1` | `.pyc` 사전 컴파일로 import 속도 개선 |
+| `UV_PROJECT_ENVIRONMENT` | `/opt/venvs/modelling` | `uv sync` 대상 venv 경로 |
+| `VIRTUAL_ENV` | `/opt/venvs/modelling` | Python venv 경로 |
+| `TMPDIR` | `/tmp` | 임시파일을 로컬 디스크에 저장 |
+
+**HuggingFace 설정:**
 
 | 변수 | 값 | 설명 |
 |---|---|---|
@@ -894,8 +907,7 @@ cd /workspace/modelling
 # 1. 토큰 설정
 echo "HF_TOKEN=hf_YOUR_TOKEN_HERE" > .env
 
-# 2. 의존성 설치 및 환경변수 적용
-uv sync --frozen --no-dev
+# 2. 환경 초기화 (venv 생성 + 의존성 설치 + 환경변수 설정을 한번에 수행)
 source env.sh
 
 # 3. 모델 다운로드
@@ -931,7 +943,96 @@ python -m cli.model_monitoring
 
 ---
 
-## 9. 트러블슈팅
+## 9. RunPod Pod + Network Volume 실행 가이드
+
+RunPod에서 Network Volume을 마운트한 GPU Pod 환경에서의 운영 방법을 다룹니다.
+
+### 9-1. 스토리지 아키텍처
+
+| 경로 | 저장 위치 | Pod 종료 시 | 설명 |
+|---|---|---|---|
+| `/workspace/modelling/` | Network Volume | **영속** | 프로젝트 소스 코드 |
+| `/workspace/.cache/huggingface/` | Network Volume | **영속** | HF 모델·데이터셋 캐시 |
+| `/workspace/.uv_cache/` | Network Volume | **영속** | uv 패키지 캐시 (wheel 등) |
+| `/opt/venvs/modelling/` | Pod 로컬 디스크 | **삭제** | Python venv (site-packages) |
+| `/tmp/` | Pod 로컬 디스크 | **삭제** | 임시 파일 |
+
+> venv(`/opt/venvs/modelling`)는 Pod 로컬 디스크에 생성됩니다. Pod 종료 시 삭제되지만, uv 패키지 캐시(`/workspace/.uv_cache`)가 Network Volume에 영속되므로 재설치가 빠릅니다.
+
+### 9-2. 최초 설정 (1회)
+
+처음 Pod를 생성한 후 한 번만 수행합니다.
+
+```bash
+cd /workspace/modelling
+
+# 1. HF 토큰 설정 (gated 모델 다운로드에 필요)
+echo "HF_TOKEN=hf_YOUR_TOKEN_HERE" > .env
+
+# 2. 환경 초기화 (venv 생성 + 의존성 설치 + 환경변수 설정)
+source env.sh
+
+# 3. 모델 다운로드 (Network Volume에 캐시)
+python -m cli.model_pulling --model LGAI-EXAONE/EXAONE-4.0-32B-FP8
+```
+
+### 9-3. Pod 재시작 시 복구 절차
+
+Pod를 Stop → Start 했거나 새 Pod를 같은 Network Volume으로 연결한 경우:
+
+```bash
+cd /workspace/modelling
+source env.sh          # venv 재생성 + 캐시에서 빠른 의존성 설치 + 환경변수 설정
+```
+
+이 한 줄로 아래 작업이 자동 수행됩니다:
+
+1. `/opt/venvs/modelling` venv가 없으면 새로 생성
+2. venv 활성화
+3. `uv sync` — `/workspace/.uv_cache`에 캐시된 wheel을 사용하여 빠르게 설치
+4. `.env` 파일 로드 및 HF/uv 관련 환경변수 설정
+
+> 모델 재다운로드는 불필요합니다. HF 모델 캐시(`/workspace/.cache/huggingface`)가 Network Volume에 영속되어 있습니다.
+
+### 9-4. uv 캐시 영속화 원리
+
+```
+Network Volume (/workspace)          Pod 로컬 디스크
+┌──────────────────────────┐         ┌──────────────────────────┐
+│ .uv_cache/               │ ──────→ │ /opt/venvs/modelling/    │
+│   wheels, metadata 등    │  복사    │   site-packages/         │
+│                          │ (fast)  │                          │
+│ .cache/huggingface/      │         │ /tmp/                    │
+│   모델 가중치            │         │   빌드 임시파일          │
+└──────────────────────────┘         └──────────────────────────┘
+```
+
+- **venv는 로컬 디스크에 생성**: Network Volume은 FUSE 마운트로 symlink가 제대로 동작하지 않으며, I/O 성능이 로컬 대비 느립니다. venv를 로컬에 두면 import 속도가 빨라집니다.
+- **캐시는 Network Volume에 저장**: `UV_CACHE_DIR=/workspace/.uv_cache`로 설정하여, `uv sync` 시 다운로드한 wheel을 영속 보관합니다. Pod 재시작 후에도 네트워크 다운로드 없이 캐시에서 바로 설치합니다.
+- **`UV_LINK_MODE=copy`**: FUSE 마운트 환경에서 symlink 대신 파일 복사를 사용하여 호환성을 보장합니다.
+- **`UV_COMPILE_BYTECODE=1`**: 설치 시 `.pyc` 파일을 사전 컴파일하여 첫 import 시간을 단축합니다.
+
+### 9-5. 용량 관리
+
+```bash
+# uv 캐시 사이즈 확인
+du -sh /workspace/.uv_cache
+
+# HF 모델 캐시 사이즈 확인
+du -sh /workspace/.cache/huggingface
+
+# uv 캐시 정리 (미사용 항목 제거)
+uv cache prune
+
+# uv 캐시 전체 삭제 (다음 uv sync 시 재다운로드 필요)
+uv cache clean
+```
+
+> Network Volume 용량이 부족한 경우, `uv cache prune`으로 미사용 캐시를 먼저 정리합니다. HF 모델 캐시는 `huggingface-cli scan-cache`로 개별 모델 용량을 확인할 수 있습니다.
+
+---
+
+## 10. 트러블슈팅
 
 ### vLLM CUDA Out of Memory
 
@@ -991,12 +1092,12 @@ source env.sh
 **해결:**
 
 ```bash
-# 의존성 재설치
-uv sync --frozen --no-dev
+# env.sh로 venv 재생성 + 의존성 재설치
+source env.sh
 
 # 가상환경 활성화 확인
 which python
-# 출력: /workspace/modelling/.venv/bin/python 이어야 함
+# 출력: /opt/venvs/modelling/bin/python 이어야 함
 ```
 
 ### 멀티 GPU 사용
@@ -1008,3 +1109,40 @@ vllm serve LGAI-EXAONE/EXAONE-4.0-32B-FP8 \
     --host 0.0.0.0 --port 8000 \
     --tensor-parallel-size 2
 ```
+
+### Pod 재시작 후 패키지 없음
+
+**증상:** `ModuleNotFoundError` — Pod Stop → Start 후 Python 패키지를 찾을 수 없음
+
+**원인:** venv(`/opt/venvs/modelling`)가 Pod 로컬 디스크에 있어 재시작 시 삭제됨.
+
+**해결:**
+
+```bash
+cd /workspace/modelling
+source env.sh    # venv 재생성 + 캐시에서 의존성 설치
+```
+
+> `env.sh`가 venv 존재 여부를 확인하고 없으면 자동 생성합니다. uv 캐시가 Network Volume에 있으므로 재설치는 수 초 내에 완료됩니다.
+
+### uv sync가 느린 경우
+
+**증상:** `uv sync` 실행 시 패키지 다운로드에 오래 걸림
+
+**원인:** uv 캐시가 비어있거나 `UV_CACHE_DIR`이 설정되지 않아 캐시를 활용하지 못함.
+
+**해결:**
+
+```bash
+# 1. UV_CACHE_DIR 확인
+echo $UV_CACHE_DIR
+# 출력: /workspace/.uv_cache 이어야 함
+
+# 2. 캐시 디렉토리 존재 확인
+ls -la /workspace/.uv_cache
+
+# 3. env.sh를 통해 환경변수가 올바르게 설정되었는지 확인
+source env.sh
+```
+
+> 최초 1회는 네트워크에서 전체 다운로드가 필요합니다. 이후 Pod 재시작 시에는 캐시에서 설치되어 빠릅니다.
