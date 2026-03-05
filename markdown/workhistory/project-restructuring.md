@@ -84,7 +84,7 @@ modelling/
 ├── api/                                 # API 라우트 레이어
 │   ├── route.py                         # 라우터 통합 (include_router)
 │   └── endpoints/                       # 엔드포인트 구현
-│       ├── inference.py                 # POST /api/inference/chat, GET /api/inference/models
+│       ├── chat.py                      # POST /api/chat/completions, GET /api/chat/models
 │       ├── models.py                    # POST /api/models/pull, GET /api/models/cached
 │       ├── testing.py                   # POST /api/testing/run-all
 │       ├── validation.py               # POST /api/validation/run
@@ -167,8 +167,8 @@ HTTP 응답
 | Method | Path | 설명 | 원본 |
 |--------|------|------|------|
 | GET | `/health` | 서버 헬스체크 | main.py |
-| POST | `/api/inference/chat` | vLLM 채팅 완성 | model-calling.py |
-| GET | `/api/inference/models` | 사용 가능 모델 목록 | model-calling.py |
+| POST | `/api/chat/completions` | vLLM 채팅 완성 | model-calling.py |
+| GET | `/api/chat/models` | 사용 가능 모델 목록 | model-calling.py |
 | POST | `/api/models/pull` | HuggingFace 모델 다운로드 | model-pulling.py |
 | GET | `/api/models/cached` | 캐시된 모델 목록 | 신규 |
 | POST | `/api/testing/run-all` | vLLM API 5종 테스트 | model-testing.py |

@@ -3,10 +3,10 @@ import time
 
 import httpx
 
-from schemas.inference import ChatRequest, InferenceResponse
+from schemas.chat import ChatRequest, ChatResponse
 
 
-class InferenceService:
+class ChatCompletionService:
 
     def __init__(self, base_url: str) -> None:
         self._base_url = base_url
@@ -59,7 +59,7 @@ class InferenceService:
             "throughput_tps": round(throughput, 1),
         }
 
-    async def chat(self, request: ChatRequest) -> InferenceResponse:
+    async def chat(self, request: ChatRequest) -> ChatResponse:
         model_name = request.model or await self.detect_model()
 
         payload = {
@@ -70,7 +70,7 @@ class InferenceService:
         }
 
         result = await self._stream_completion(payload)
-        return InferenceResponse(
+        return ChatResponse(
             content=result["content"],
             model=model_name,
             ttft_ms=result["ttft_ms"],

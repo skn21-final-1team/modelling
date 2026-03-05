@@ -2,15 +2,15 @@ from fastapi import APIRouter, HTTPException
 
 from core.config import settings
 from schemas.base import BaseResponse
-from schemas.inference import ChatRequest, InferenceResponse
-from services.inference_service import InferenceService
+from schemas.chat import ChatRequest, ChatResponse
+from services.chat_service import ChatCompletionService
 
-router = APIRouter(prefix="/api/inference", tags=["inference"])
+router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
-@router.post("/chat", response_model=BaseResponse[InferenceResponse])
-async def chat(request: ChatRequest) -> BaseResponse[InferenceResponse]:
-    service = InferenceService(base_url=settings.VLLM_BASE_URL)
+@router.post("/completions", response_model=BaseResponse[ChatResponse])
+async def chat(request: ChatRequest) -> BaseResponse[ChatResponse]:
+    service = ChatCompletionService(base_url=settings.VLLM_BASE_URL)
     try:
         response = await service.chat(request)
     except Exception as e:
@@ -20,7 +20,7 @@ async def chat(request: ChatRequest) -> BaseResponse[InferenceResponse]:
 
 @router.get("/models")
 async def list_models() -> BaseResponse[list[str]]:
-    service = InferenceService(base_url=settings.VLLM_BASE_URL)
+    service = ChatCompletionService(base_url=settings.VLLM_BASE_URL)
     try:
         model = await service.detect_model()
     except Exception as e:

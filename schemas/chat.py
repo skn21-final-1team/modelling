@@ -9,11 +9,11 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[Message]
     model: str | None = None
-    max_tokens: int = 256
+    max_tokens: int = 1024
     temperature: float = 0.7
 
 
-class InferenceResponse(BaseModel):
+class ChatResponse(BaseModel):
     content: str
     model: str
     ttft_ms: float

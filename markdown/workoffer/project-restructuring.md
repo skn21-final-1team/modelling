@@ -226,8 +226,8 @@ router.include_router(monitoring_router)
 | Method | Path | 설명 | Request Body | Response |
 |--------|------|------|-------------|----------|
 | GET | `/health` | 헬스체크 | - | `{"status": "ok"}` |
-| POST | `/api/inference/chat` | 채팅 완성 | `ChatRequest` | `BaseResponse[InferenceResponse]` |
-| GET | `/api/inference/models` | 모델 목록 | - | `BaseResponse[list]` |
+| POST | `/api/chat/completions` | 채팅 완성 | `ChatRequest` | `BaseResponse[InferenceResponse]` |
+| GET | `/api/chat/models` | 모델 목록 | - | `BaseResponse[list]` |
 | POST | `/api/models/pull` | 모델 다운로드 | `ModelPullRequest` | `BaseResponse[ModelPullResponse]` |
 | GET | `/api/models/cached` | 캐시 모델 목록 | - | `BaseResponse[list[CachedModelResponse]]` |
 | POST | `/api/testing/run-all` | API 5종 테스트 | - | `BaseResponse[TestSuiteResponse]` |

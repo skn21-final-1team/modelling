@@ -94,7 +94,7 @@ response = InferenceResponse(     # dict → schema 재변환
 |--------|------|------|
 | **Schema** | 요청/응답 데이터 구조 정의 및 검증 | `ChatRequest`, `InferenceResponse` |
 | **Service** | 비즈니스 로직, 외부 API 호출, 데이터 변환 | `InferenceService.chat()` |
-| **Endpoint** | HTTP 라우팅, 에러 핸들링, 응답 래핑 | `POST /api/inference/chat` |
+| **Endpoint** | HTTP 라우팅, 에러 핸들링, 응답 래핑 | `POST /api/chat/completions` |
 | **CLI** | 터미널 인터페이스, Service 재사용 | `python -m cli.model_testing` |
 
 ---

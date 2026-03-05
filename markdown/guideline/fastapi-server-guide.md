@@ -285,8 +285,8 @@ http://localhost:8080/docs
 | Method | Path | 설명 |
 |---|---|---|
 | GET | `/health` | 서버 헬스체크 |
-| POST | `/api/inference/chat` | vLLM 채팅 완성 (TTFT, 처리량 측정) |
-| GET | `/api/inference/models` | 사용 가능 모델 목록 |
+| POST | `/api/chat/completions` | vLLM 채팅 완성 (TTFT, 처리량 측정) |
+| GET | `/api/chat/models` | 사용 가능 모델 목록 |
 | POST | `/api/models/pull` | HuggingFace 모델 다운로드 |
 | GET | `/api/models/cached` | 캐시된 모델 목록 |
 | POST | `/api/testing/run-all` | vLLM API 5종 자동 테스트 |
@@ -321,7 +321,7 @@ curl http://localhost:8080/health
 
 ### 5.1 추론 (Inference)
 
-#### POST `/api/inference/chat`
+#### POST `/api/chat/completions`
 
 vLLM 서버에 채팅 완성 요청을 보내고, TTFT(Time To First Token)와 처리량을 측정합니다.
 
@@ -329,9 +329,9 @@ vLLM 서버에 채팅 완성 요청을 보내고, TTFT(Time To First Token)와 �
 
 | 필드 | 타입 | 필수 | 기본값 | 설명 |
 |---|---|---|---|---|
-| `prompt` | `str` | O | - | 입력 프롬프트 |
+| `messages` | `list[Message]` | O | - | 메시지 목록 (role, content) |
 | `model` | `str \| null` | X | `null` (자동 감지) | 모델 이름 |
-| `max_tokens` | `int` | X | `256` | 최대 생성 토큰 수 |
+| `max_tokens` | `int` | X | `1024` | 최대 생성 토큰 수 |
 | `temperature` | `float` | X | `0.7` | 샘플링 온도 |
 | `system_prompt` | `str \| null` | X | `null` | 시스템 프롬프트 |
 
@@ -374,16 +374,16 @@ vLLM 서버에 채팅 완성 요청을 보내고, TTFT(Time To First Token)와 �
 **curl:**
 
 ```bash
-curl -X POST http://localhost:8080/api/inference/chat \
+curl -X POST http://localhost:8080/api/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "인공지능이란 무엇인가요?",
-    "max_tokens": 256,
+    "messages": [{"role": "user", "content": "인공지능이란 무엇인가요?"}],
+    "max_tokens": 1024,
     "temperature": 0.7
   }'
 ```
 
-#### GET `/api/inference/models`
+#### GET `/api/chat/models`
 
 vLLM 서버에 로드된 모델 목록을 조회합니다.
 
@@ -400,7 +400,7 @@ vLLM 서버에 로드된 모델 목록을 조회합니다.
 **curl:**
 
 ```bash
-curl http://localhost:8080/api/inference/models
+curl http://localhost:8080/api/chat/models
 ```
 
 ---
@@ -927,9 +927,9 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8080 &
 curl http://localhost:8080/health
 
 # 7. 추론 테스트
-curl -X POST http://localhost:8080/api/inference/chat \
+curl -X POST http://localhost:8080/api/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "인공지능이란 무엇인가요?"}'
+  -d '{"messages": [{"role": "user", "content": "인공지능이란 무엇인가요?"}]}'
 
 # 8. API 테스트 (CLI)
 python -m cli.model_testing
