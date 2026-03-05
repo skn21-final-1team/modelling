@@ -6,6 +6,13 @@ from pathlib import Path
 
 import httpx
 
+from schemas.validation import (
+    OverallScoreResponse,
+    TypeScoreResponse,
+    ValidationRequest,
+    ValidationSummaryResponse,
+)
+
 
 class ValidationService:
 
@@ -46,7 +53,7 @@ class ValidationService:
             models = resp.json()["data"]
             return models[0]["id"]
 
-    def load_test_data(self, csv_path: Path) -> list[dict]:
+    def _load_test_data(self, csv_path: Path) -> list[dict]:
         rows: list[dict] = []
         with open(csv_path, encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -54,7 +61,7 @@ class ValidationService:
                 rows.append(row)
         return rows
 
-    async def get_model_answer(
+    async def _get_model_answer(
         self, model: str, context: str, question: str
     ) -> dict:
         payload = {
@@ -85,7 +92,7 @@ class ValidationService:
             "usage": result["usage"],
         }
 
-    async def judge_answer(
+    async def _judge_answer(
         self,
         model: str,
         question: str,
@@ -144,13 +151,14 @@ class ValidationService:
             }
 
     async def run_validation(
-        self, model: str, csv_path: Path, sample_size: int = 0
-    ) -> dict:
-        test_data = self.load_test_data(csv_path)
+        self, request: ValidationRequest, csv_path: Path
+    ) -> ValidationSummaryResponse:
+        model = await self.detect_model()
+        test_data = self._load_test_data(csv_path)
 
-        if 0 < sample_size < len(test_data):
+        if 0 < request.sample_size < len(test_data):
             random.seed(42)
-            test_data = random.sample(test_data, sample_size)
+            test_data = random.sample(test_data, request.sample_size)
 
         results: list[dict] = []
         type_scores: dict[str, list[dict]] = {}
@@ -163,7 +171,7 @@ class ValidationService:
             question_type = row["question_type"]
 
             try:
-                answer_result = await self.get_model_answer(model, context, question)
+                answer_result = await self._get_model_answer(model, context, question)
                 model_answer = answer_result["answer"]
             except Exception as e:
                 results.append({
@@ -181,7 +189,7 @@ class ValidationService:
                 continue
 
             try:
-                judge_result = await self.judge_answer(
+                judge_result = await self._judge_answer(
                     model, question, reference_answer, model_answer
                 )
             except Exception as e:
@@ -211,32 +219,37 @@ class ValidationService:
                 type_scores[question_type] = []
             type_scores[question_type].append(judge_result)
 
-        return self._aggregate_scores(results, type_scores)
+        results_csv_path: str | None = None
+        if results:
+            saved = self._save_results_csv(
+                results, csv_path.parent / "validation_results.csv"
+            )
+            results_csv_path = str(saved)
+
+        return self._aggregate_scores(results, type_scores, results_csv_path)
 
     def _aggregate_scores(
-        self, results: list[dict], type_scores: dict[str, list[dict]]
-    ) -> dict:
+        self,
+        results: list[dict],
+        type_scores: dict[str, list[dict]],
+        results_csv_path: str | None,
+    ) -> ValidationSummaryResponse:
         valid_results = [r for r in results if r["correctness"] > 0]
-        summary: dict = {
-            "total": len(results),
-            "valid": len(valid_results),
-            "results": results,
-        }
 
+        overall = None
         if valid_results:
             overall_correctness = sum(r["correctness"] for r in valid_results) / len(valid_results)
             overall_relevance = sum(r["relevance"] for r in valid_results) / len(valid_results)
             overall_completeness = sum(r["completeness"] for r in valid_results) / len(valid_results)
             overall_avg = (overall_correctness + overall_relevance + overall_completeness) / 3
+            overall = OverallScoreResponse(
+                correctness=round(overall_correctness, 2),
+                relevance=round(overall_relevance, 2),
+                completeness=round(overall_completeness, 2),
+                average=round(overall_avg, 2),
+            )
 
-            summary["overall"] = {
-                "correctness": round(overall_correctness, 2),
-                "relevance": round(overall_relevance, 2),
-                "completeness": round(overall_completeness, 2),
-                "average": round(overall_avg, 2),
-            }
-
-        summary["by_type"] = {}
+        by_type: dict[str, TypeScoreResponse] = {}
         for qtype, scores in sorted(type_scores.items()):
             valid = [s for s in scores if s["correctness"] > 0]
             if not valid:
@@ -245,17 +258,23 @@ class ValidationService:
             avg_r = sum(s["relevance"] for s in valid) / len(valid)
             avg_comp = sum(s["completeness"] for s in valid) / len(valid)
             avg_all = (avg_c + avg_r + avg_comp) / 3
-            summary["by_type"][qtype] = {
-                "count": len(valid),
-                "correctness": round(avg_c, 2),
-                "relevance": round(avg_r, 2),
-                "completeness": round(avg_comp, 2),
-                "average": round(avg_all, 2),
-            }
+            by_type[qtype] = TypeScoreResponse(
+                count=len(valid),
+                correctness=round(avg_c, 2),
+                relevance=round(avg_r, 2),
+                completeness=round(avg_comp, 2),
+                average=round(avg_all, 2),
+            )
 
-        return summary
+        return ValidationSummaryResponse(
+            total=len(results),
+            valid=len(valid_results),
+            overall=overall,
+            by_type=by_type,
+            results_csv_path=results_csv_path,
+        )
 
-    def save_results_csv(self, results: list[dict], path: Path) -> Path:
+    def _save_results_csv(self, results: list[dict], path: Path) -> Path:
         fieldnames = [
             "content_id", "question_type", "question", "model_answer",
             "correctness", "relevance", "completeness", "reasoning",

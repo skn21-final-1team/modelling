@@ -11,6 +11,7 @@ import asyncio
 import sys
 
 from core.config import settings
+from schemas.model_registry import ModelPullRequest
 from services.model_registry_service import ModelRegistryService
 
 
@@ -38,9 +39,10 @@ def main() -> None:
     print(f"Cache directory: {settings.HF_HOME}")
     print(f"hf_transfer enabled: {settings.HF_HUB_ENABLE_HF_TRANSFER}")
 
+    request = ModelPullRequest(model_id=args.model, revision=args.revision)
     try:
-        result = asyncio.run(service.pull_model(args.model, args.revision))
-        print(f"Model downloaded to: {result['local_path']}")
+        result = asyncio.run(service.pull_model(request))
+        print(f"Model downloaded to: {result.local_path}")
     except Exception as e:
         print(f"ERROR: Failed to download model: {e}", file=sys.stderr)
         sys.exit(1)

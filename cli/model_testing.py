@@ -28,19 +28,19 @@ def main() -> None:
     service = TestService(base_url=args.base_url)
     result = asyncio.run(service.run_all())
 
-    for r in result["results"]:
-        status = "PASS" if r["passed"] else "FAIL"
+    for r in result.results:
+        status = "PASS" if r.passed else "FAIL"
         detail_parts: list[str] = []
-        if r.get("latency_s") is not None:
-            detail_parts.append(f"latency: {r['latency_s']}s")
-        if r.get("error"):
-            detail_parts.append(r["error"])
+        if r.latency_s is not None:
+            detail_parts.append(f"latency: {r.latency_s}s")
+        if r.error:
+            detail_parts.append(r.error)
         detail_str = f" ({', '.join(detail_parts)})" if detail_parts else ""
-        print(f"  [{status}] {r['name']}{detail_str}")
+        print(f"  [{status}] {r.name}{detail_str}")
 
     print(f"\n{'=' * 50}")
-    print(f"Results: {result['passed']} passed, {result['failed']} failed, {result['total']} total")
-    sys.exit(1 if result["failed"] > 0 else 0)
+    print(f"Results: {result.passed} passed, {result.failed} failed, {result.total} total")
+    sys.exit(1 if result.failed > 0 else 0)
 
 
 if __name__ == "__main__":

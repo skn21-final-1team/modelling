@@ -2,37 +2,37 @@ import time
 
 import httpx
 
+from schemas.testing import TestResultResponse, TestSuiteResponse
+
 
 class TestService:
 
     def __init__(self, base_url: str) -> None:
         self._base_url = base_url
 
-    async def test_health(self) -> dict:
+    async def _test_health(self) -> TestResultResponse:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(f"{self._base_url}/health")
                 passed = resp.status_code == 200
-            return {"name": "health", "passed": passed}
+            return TestResultResponse(name="health", passed=passed)
         except Exception as e:
-            return {"name": "health", "passed": False, "error": str(e)}
+            return TestResultResponse(name="health", passed=False, error=str(e))
 
-    async def test_models(self) -> dict:
+    async def _test_models(self) -> TestResultResponse:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(f"{self._base_url}/v1/models")
                 resp.raise_for_status()
                 data = resp.json()
                 model_id = data["data"][0]["id"]
-            return {
-                "name": "models",
-                "passed": True,
-                "detail": {"model": model_id},
-            }
+            return TestResultResponse(
+                name="models", passed=True, detail={"model": model_id}
+            )
         except Exception as e:
-            return {"name": "models", "passed": False, "error": str(e)}
+            return TestResultResponse(name="models", passed=False, error=str(e))
 
-    async def test_chat_completion(self, model: str) -> dict:
+    async def _test_chat_completion(self, model: str) -> TestResultResponse:
         payload = {
             "model": model,
             "messages": [
@@ -51,16 +51,18 @@ class TestService:
             resp.raise_for_status()
             result = resp.json()
             content = result["choices"][0]["message"]["content"]
-            return {
-                "name": "chat_completion",
-                "passed": len(content) > 0,
-                "latency_s": round(latency, 3),
-                "detail": {"content": content, "usage": result["usage"]},
-            }
+            return TestResultResponse(
+                name="chat_completion",
+                passed=len(content) > 0,
+                latency_s=round(latency, 3),
+                detail={"content": content, "usage": result["usage"]},
+            )
         except Exception as e:
-            return {"name": "chat_completion", "passed": False, "error": str(e)}
+            return TestResultResponse(
+                name="chat_completion", passed=False, error=str(e)
+            )
 
-    async def test_completion(self, model: str) -> dict:
+    async def _test_completion(self, model: str) -> TestResultResponse:
         payload = {
             "model": model,
             "prompt": "The capital of France is",
@@ -77,16 +79,16 @@ class TestService:
             resp.raise_for_status()
             result = resp.json()
             text = result["choices"][0]["text"]
-            return {
-                "name": "completion",
-                "passed": len(text) > 0,
-                "latency_s": round(latency, 3),
-                "detail": {"text": text, "usage": result["usage"]},
-            }
+            return TestResultResponse(
+                name="completion",
+                passed=len(text) > 0,
+                latency_s=round(latency, 3),
+                detail={"text": text, "usage": result["usage"]},
+            )
         except Exception as e:
-            return {"name": "completion", "passed": False, "error": str(e)}
+            return TestResultResponse(name="completion", passed=False, error=str(e))
 
-    async def test_streaming(self, model: str) -> dict:
+    async def _test_streaming(self, model: str) -> TestResultResponse:
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": "Count from 1 to 5."}],
@@ -113,55 +115,55 @@ class TestService:
                             chunks += 1
 
             total_latency = time.perf_counter() - start
-            return {
-                "name": "streaming",
-                "passed": chunks > 0,
-                "latency_s": round(total_latency, 3),
-                "detail": {
+            return TestResultResponse(
+                name="streaming",
+                passed=chunks > 0,
+                latency_s=round(total_latency, 3),
+                detail={
                     "chunks": chunks,
                     "ttft_s": round(ttft, 3) if ttft else None,
                 },
-            }
+            )
         except Exception as e:
-            return {"name": "streaming", "passed": False, "error": str(e)}
+            return TestResultResponse(name="streaming", passed=False, error=str(e))
 
-    async def run_all(self) -> dict:
-        health = await self.test_health()
-        if not health["passed"]:
-            return {
-                "base_url": self._base_url,
-                "model": None,
-                "total": 1,
-                "passed": 0,
-                "failed": 1,
-                "results": [health],
-            }
+    async def run_all(self) -> TestSuiteResponse:
+        health = await self._test_health()
+        if not health.passed:
+            return TestSuiteResponse(
+                base_url=self._base_url,
+                model=None,
+                total=1,
+                passed=0,
+                failed=1,
+                results=[health],
+            )
 
-        models_result = await self.test_models()
-        model = models_result.get("detail", {}).get("model")
+        models_result = await self._test_models()
+        model = (models_result.detail or {}).get("model") if models_result.passed else None
         if not model:
-            return {
-                "base_url": self._base_url,
-                "model": None,
-                "total": 2,
-                "passed": 1,
-                "failed": 1,
-                "results": [health, models_result],
-            }
+            return TestSuiteResponse(
+                base_url=self._base_url,
+                model=None,
+                total=2,
+                passed=1,
+                failed=1,
+                results=[health, models_result],
+            )
 
-        chat = await self.test_chat_completion(model)
-        completion = await self.test_completion(model)
-        streaming = await self.test_streaming(model)
+        chat = await self._test_chat_completion(model)
+        completion = await self._test_completion(model)
+        streaming = await self._test_streaming(model)
 
         results = [health, models_result, chat, completion, streaming]
-        passed = sum(1 for r in results if r["passed"])
+        passed = sum(1 for r in results if r.passed)
         failed = len(results) - passed
 
-        return {
-            "base_url": self._base_url,
-            "model": model,
-            "total": len(results),
-            "passed": passed,
-            "failed": failed,
-            "results": results,
-        }
+        return TestSuiteResponse(
+            base_url=self._base_url,
+            model=model,
+            total=len(results),
+            passed=passed,
+            failed=failed,
+            results=results,
+        )

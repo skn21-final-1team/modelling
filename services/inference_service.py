@@ -3,6 +3,8 @@ import time
 
 import httpx
 
+from schemas.inference import ChatRequest, InferenceResponse
+
 
 class InferenceService:
 
@@ -16,7 +18,7 @@ class InferenceService:
             models = resp.json()["data"]
             return models[0]["id"]
 
-    async def stream_completion(self, payload: dict) -> dict:
+    async def _stream_completion(self, payload: dict) -> dict:
         payload["stream"] = True
         t_start = time.perf_counter()
         ttft: float | None = None
@@ -57,28 +59,22 @@ class InferenceService:
             "throughput_tps": round(throughput, 1),
         }
 
-    async def chat(
-        self,
-        prompt: str,
-        model: str | None = None,
-        max_tokens: int = 256,
-        temperature: float = 0.7,
-        system_prompt: str | None = None,
-    ) -> dict:
-        model_name = model or await self.detect_model()
-
-        messages: list[dict] = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+    async def chat(self, request: ChatRequest) -> InferenceResponse:
+        model_name = request.model or await self.detect_model()
 
         payload = {
             "model": model_name,
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
+            "messages": [m.model_dump() for m in request.messages],
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
         }
 
-        result = await self.stream_completion(payload)
-        result["model"] = model_name
-        return result
+        result = await self._stream_completion(payload)
+        return InferenceResponse(
+            content=result["content"],
+            model=model_name,
+            ttft_ms=result["ttft_ms"],
+            total_s=result["total_s"],
+            completion_tokens=result["completion_tokens"],
+            throughput_tps=result["throughput_tps"],
+        )

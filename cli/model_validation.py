@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from core.config import settings
+from schemas.validation import ValidationRequest
 from services.validation_service import ValidationService
 
 
@@ -52,42 +53,41 @@ def main() -> None:
     print("=" * 60)
 
     service = ValidationService(base_url=args.base_url)
-
-    try:
-        model = asyncio.run(service.detect_model())
-    except Exception:
-        print("FAIL - Server not responding", file=sys.stderr)
-        sys.exit(1)
-
-    summary = asyncio.run(
-        service.run_validation(model, csv_path, args.sample_size)
+    request = ValidationRequest(
+        base_url=args.base_url,
+        csv_path=str(csv_path),
+        sample_size=args.sample_size,
     )
 
-    if summary.get("valid", 0) == 0:
+    try:
+        summary = asyncio.run(service.run_validation(request, csv_path))
+    except Exception as e:
+        print(f"FAIL - {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if summary.valid == 0:
         print("\nERROR: No valid results obtained")
         sys.exit(1)
 
-    if summary.get("overall"):
-        o = summary["overall"]
-        print(f"\nOverall ({summary['valid']} valid / {summary['total']} total):")
-        print(f"  correctness:  {o['correctness']:.2f} / 5.00")
-        print(f"  relevance:    {o['relevance']:.2f} / 5.00")
-        print(f"  completeness: {o['completeness']:.2f} / 5.00")
-        print(f"  average:      {o['average']:.2f} / 5.00")
+    if summary.overall:
+        o = summary.overall
+        print(f"\nOverall ({summary.valid} valid / {summary.total} total):")
+        print(f"  correctness:  {o.correctness:.2f} / 5.00")
+        print(f"  relevance:    {o.relevance:.2f} / 5.00")
+        print(f"  completeness: {o.completeness:.2f} / 5.00")
+        print(f"  average:      {o.average:.2f} / 5.00")
 
-    for qtype, scores in summary.get("by_type", {}).items():
-        print(f"\n  {qtype} (n={scores['count']}):")
+    for qtype, scores in summary.by_type.items():
+        print(f"\n  {qtype} (n={scores.count}):")
         print(
-            f"    correctness={scores['correctness']:.2f}  "
-            f"relevance={scores['relevance']:.2f}  "
-            f"completeness={scores['completeness']:.2f}  "
-            f"avg={scores['average']:.2f}"
+            f"    correctness={scores.correctness:.2f}  "
+            f"relevance={scores.relevance:.2f}  "
+            f"completeness={scores.completeness:.2f}  "
+            f"avg={scores.average:.2f}"
         )
 
-    if summary.get("results"):
-        results_path = Path(settings.PROCESSED_DATA_DIR) / "validation_results.csv"
-        service.save_results_csv(summary["results"], results_path)
-        print(f"\nDetailed results saved to {results_path}")
+    if summary.results_csv_path:
+        print(f"\nDetailed results saved to {summary.results_csv_path}")
 
 
 if __name__ == "__main__":

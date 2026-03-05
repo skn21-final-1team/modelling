@@ -6,18 +6,20 @@ uv.lock 참고
 
 ## Project Structure
 
-├── main.py              # 애플리케이션 진입점 (FastAPI 인스턴스 생성)
+├── main.py                # 애플리케이션 진입점 (FastAPI 인스턴스 생성)
 ├── api/                   # API 라우트 레이어
-│   └── route.py          # 라우터들을 하나로 묶어주는 곳
-│   └── endpoints/       # 실제 엔드포인트 구현 (chat.py, items.py 등)
-├── core/                # 프로젝트 전반의 설정
-│   └── config.py        # 환경변수(pydantic-settings) 및 설정 
-├── crud/                # Create, Read, Update, Delete (DB 조작 로직)
-├── models/              # DB 테이블 정의 (SQLAlchemy, Tortoise 등)
-├── schemas/             # DTO (Pydantic 모델)
-├── db/                  # DB 연결 설정 및 세션 관리
-├── services/            # 비즈니스 로직
-├── .env                     # 환경변수 파일
+│   └── route.py           # 라우터들을 하나로 묶어주는 곳
+│   └── endpoints/         # 실제 엔드포인트 구현 (inference, testing, validation, models, monitoring)
+├── cli/                   # CLI 커맨드 (model_pulling, model_testing, model_validation)
+├── core/                  # 프로젝트 전반의 설정
+│   └── config.py          # 환경변수(pydantic-settings) 및 설정
+├── schemas/               # Pydantic 입출력 스키마 (서비스의 입력/출력 타입)
+├── services/              # 비즈니스 로직 (schema 입력 → schema 출력)
+│   └── monitoring/        # GPU/시스템/vLLM 모니터링 서비스
+├── data/                  # 데이터 파일
+├── docker/                # Docker 설정
+├── markdown/              # 문서 (workoffer, workhistory, guideline)
+├── .env                   # 환경변수 파일
 ├── pyproject.toml         # 의존성 관리
 
 ## code Conventions
@@ -46,14 +48,14 @@ uv.lock 참고
 - 이 레포지토리의 목적은 OPEN LLM을 최적으로 서빙하는 API를 구축하는 것 입니다.
 - 가독성 높은 실험 코드를 작성합니다.
 - 재사용 가능한 모듈을 작성합니다.
-- 상기 명시된 구조와 컨벤션을 절대적으로 준수하며, 복잡한 로직은 `services/`에, DB 접근은 `crud/`에 분리하여 결합도를 낮춥니다.
+- 상기 명시된 구조와 컨벤션을 절대적으로 준수하며, 복잡한 로직은 `services/`에 분리하여 결합도를 낮춥니다.
 
 ### 2. Folder Strategy
 
-- `core/`: `BaseSettings`를 통해 `.env`를 관리하며, DB 연결은 싱글톤 패턴에 가깝게 유지합니다.
+- `core/`: `BaseSettings`를 통해 `.env`를 관리합니다.
 - 각 폴더는 독립적인 도메인으로 취급합니다.
 - 실험을 위해 새로운 알고리즘이 추가될 때 기존 코드를 수정하지 않고 **확장(Inheritance)**할 수 있도록 OOP를 지향합니다.
-- `main.py`: 개별 모듈을 조립하여 "DB 로드 -> OPENLLM 호출 -> OPENLLM 서빙 -> 리소스 추적"이라는 전체 파이프라인을 실행하는 역할을 수행합니다.
+- `main.py`: 개별 모듈을 조립하여 "vLLM 서빙 → 모델 추론 → 리소스 모니터링"이라는 전체 파이프라인을 실행하는 역할을 수행합니다.
 
 ### 3. Development Rules
 
@@ -84,25 +86,25 @@ uv.lock 참고
 - 모든 의존성 관리는 `pyproject.toml`을 기준으로 하며, 패키지 추가 시 반드시 `uv add`를 사용합니다.
 - 패키지 조작 후에는 항상 `uv.lock` 파일이 업데이트되었는지 확인하여 환경 일관성을 유지합니다.
 
-## 4. 레이어 책임 분리
-- `services/`는 비즈니스 로직만 담당하며, **모델 또는 원시 데이터(str, tuple 등)**만 반환합니다.
-- **응답 스키마(Pydantic DTO) 구성은 반드시 `api/endpoints/`에서** 수행합니다.
-- 서비스가 응답 스키마를 직접 import하거나 생성하지 않습니다.
+## 4. 레이어 책임 분리 (`schema → service → external API`)
+- `services/`는 Pydantic schema를 입력으로 받고 Pydantic schema를 출력으로 반환합니다.
+- `api/endpoints/`는 서비스의 반환값을 그대로 전달하며, 에러 처리만 담당합니다.
+- `cli/`는 schema를 생성하여 서비스에 전달하고, 결과 schema의 attribute에 접근합니다.
 
 ```python
-# ✅ 올바른 패턴: 서비스는 원시 데이터 반환
-class AuthService:
-    def create_tokens(self, user: UserModel, db: Session) -> tuple[str, str]:
-        return access_token, refresh_token
+# ✅ 올바른 패턴: 서비스는 schema 입력 → schema 출력
+class InferenceService:
+    async def chat(self, request: ChatRequest) -> InferenceResponse:
+        result = await self._stream_completion(payload)
+        return InferenceResponse(content=result["content"], model=model_name, ...)
 
-# ✅ 올바른 패턴: 엔드포인트에서 응답 스키마 구성
-def login(req: LoginRequest, db: DbSession, response: Response) -> BaseResponse[LoginResponse]:
-    user = login_service.login(req, db)
-    access_token, refresh_token = auth_service.create_tokens(user, db)
-    login_response = LoginResponse(access_token=access_token, user=UserInfoResponse(...))
-    return BaseResponse.ok(data=login_response)
+# ✅ 올바른 패턴: 엔드포인트는 서비스 결과를 직접 반환
+@router.post("/chat", response_model=InferenceResponse)
+async def chat(request: ChatRequest) -> InferenceResponse:
+    return await inference_service.chat(request)
 
-# ❌ 잘못된 패턴: 서비스에서 응답 스키마 생성
-class AuthService:
-    def create_tokens(self, user: UserModel, db: Session) -> LoginResponse:
-        return LoginResponse(access_token=access_token, user=UserInfoResponse(...))
+# ❌ 잘못된 패턴: 엔드포인트에서 dict → schema 변환
+@router.post("/chat")
+async def chat(request: ChatRequest):
+    result = await inference_service.chat(request.prompt, request.max_tokens)  # dict 반환
+    return InferenceResponse(**result)  # 엔드포인트에서 schema 구성
