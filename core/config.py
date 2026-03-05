@@ -2,8 +2,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite:///./dev.db"
-
     PROJECT_NAME: str = "Modelling Service"
     DEBUG: bool = False
 

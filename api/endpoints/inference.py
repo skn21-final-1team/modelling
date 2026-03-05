@@ -12,23 +12,9 @@ router = APIRouter(prefix="/api/inference", tags=["inference"])
 async def chat(request: ChatRequest) -> BaseResponse[InferenceResponse]:
     service = InferenceService(base_url=settings.VLLM_BASE_URL)
     try:
-        result = await service.chat(
-            prompt=request.prompt,
-            model=request.model,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-            system_prompt=request.system_prompt,
-        )
+        response = await service.chat(request)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"vLLM server error: {e}")
-    response = InferenceResponse(
-        content=result["content"],
-        model=result["model"],
-        ttft_ms=result["ttft_ms"],
-        total_s=result["total_s"],
-        completion_tokens=result["completion_tokens"],
-        throughput_tps=result["throughput_tps"],
-    )
     return BaseResponse.ok(data=response)
 
 
