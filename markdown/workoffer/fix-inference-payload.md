@@ -2,7 +2,7 @@
 
 ## 배경
 
-현재 `inference_service.py`의 `chat()` 메서드는 `prompt: str` 단일 문자열을 받아 내부에서 messages 배열을 조립하고 있다.
+현재 `inference_service.py`의 `chat()` 메서드는 `ChatRequest` 스키마를 받지만, 스키마 내부에 `prompt: str` 단일 문자열과 `system_prompt: str | None`이 분리되어 있다. 서비스 내부에서 이를 messages 배열로 조립하는 구조이다.
 
 이 구조의 문제:
 1. **멀티턴 대화 불가** — 이전 대화 이력(assistant 응답 포함)을 전달할 수 없음
@@ -31,48 +31,43 @@ class ChatRequest(BaseModel):
 ### 서비스 — `modelling/services/inference_service.py`
 
 ```python
-async def chat(
-    self,
-    prompt: str,
-    model: str | None = None,
-    max_tokens: int = 256,
-    temperature: float = 0.7,
-    system_prompt: str | None = None,
-) -> dict:
-    model_name = model or await self.detect_model()
+async def chat(self, request: ChatRequest) -> InferenceResponse:
+    model_name = request.model or await self.detect_model()
 
     messages: list[dict] = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": prompt})   # 단일 user 메시지만 가능
+    if request.system_prompt:
+        messages.append({"role": "system", "content": request.system_prompt})
+    messages.append({"role": "user", "content": request.prompt})   # 단일 user 메시지만 가능
 
     payload = {
         "model": model_name,
         "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
+        "max_tokens": request.max_tokens,
+        "temperature": request.temperature,
     }
-    ...
+
+    result = await self._stream_completion(payload)
+    return InferenceResponse(
+        content=result["content"],
+        model=model_name,
+        ...
+    )
 ```
 
 ### 엔드포인트 — `modelling/api/endpoints/inference.py`
 
+엔드포인트는 이미 `schema → service → API` 패턴이 적용되어 있어 `service.chat(request)`로 직접 전달한다. 이 부분은 변경 없음.
+
 ```python
-result = await service.chat(
-    prompt=request.prompt,
-    model=request.model,
-    max_tokens=request.max_tokens,
-    temperature=request.temperature,
-    system_prompt=request.system_prompt,
-)
+response = await service.chat(request)
 ```
 
 ### 문제점 요약
 
 | 항목 | 현재 상태 | 문제 |
 |------|----------|------|
-| 입력 형식 | `prompt: str` (단일 문자열) | 멀티턴 대화 이력 전달 불가 |
-| system prompt | 별도 `system_prompt` 필드 | OpenAI 표준과 불일치 |
+| 입력 형식 | `ChatRequest.prompt: str` (단일 문자열) | 멀티턴 대화 이력 전달 불가 |
+| system prompt | 별도 `ChatRequest.system_prompt` 필드 | OpenAI 표준과 불일치 |
 | messages 조립 | 서비스 내부에서 고정 패턴으로 생성 | 호출자가 role 구성 제어 불가 |
 | 모델 전환 | vLLM 전용 구조 | ChatGPT로 전환 시 코드 수정 필요 |
 
@@ -115,46 +110,46 @@ class InferenceResponse(BaseModel):
 ### 서비스 — `modelling/services/inference_service.py`
 
 ```python
-async def chat(
-    self,
-    messages: list[dict],
-    model: str | None = None,
-    max_tokens: int = 256,
-    temperature: float = 0.7,
-) -> dict:
-    model_name = model or await self.detect_model()
+async def chat(self, request: ChatRequest) -> InferenceResponse:
+    model_name = request.model or await self.detect_model()
 
     payload = {
         "model": model_name,
-        "messages": messages,       # 전달받은 messages를 그대로 사용
-        "max_tokens": max_tokens,
-        "temperature": temperature,
+        "messages": [m.model_dump() for m in request.messages],  # 스키마를 그대로 변환
+        "max_tokens": request.max_tokens,
+        "temperature": request.temperature,
     }
 
-    result = await self.stream_completion(payload)
-    result["model"] = model_name
-    return result
+    result = await self._stream_completion(payload)
+    return InferenceResponse(
+        content=result["content"],
+        model=model_name,
+        ttft_ms=result["ttft_ms"],
+        total_s=result["total_s"],
+        completion_tokens=result["completion_tokens"],
+        throughput_tps=result["throughput_tps"],
+    )
 ```
 
 변경 사항:
-- `prompt`, `system_prompt` 파라미터 제거
-- `messages: list[dict]` 파라미터 추가
-- 내부 messages 조립 로직 제거 — 호출자가 전달한 messages를 payload에 그대로 전달
+- messages 조립 로직 제거 (`if request.system_prompt`, `messages.append(...)` 등)
+- `request.messages`를 `model_dump()`로 dict 변환하여 payload에 그대로 전달
+- 메서드 시그니처(`chat(self, request: ChatRequest) -> InferenceResponse`)는 유지
 
 ### 엔드포인트 — `modelling/api/endpoints/inference.py`
 
-```python
-result = await service.chat(
-    messages=[m.model_dump() for m in request.messages],
-    model=request.model,
-    max_tokens=request.max_tokens,
-    temperature=request.temperature,
-)
-```
+**변경 없음.** 기존 `schema → service → API` 패턴이 유지되므로 엔드포인트 코드는 수정하지 않는다.
 
-변경 사항:
-- `prompt=`, `system_prompt=` 제거
-- `messages=` 전달, Pydantic 모델을 dict로 변환
+```python
+@router.post("/chat", response_model=BaseResponse[InferenceResponse])
+async def chat(request: ChatRequest) -> BaseResponse[InferenceResponse]:
+    service = InferenceService(base_url=settings.VLLM_BASE_URL)
+    try:
+        response = await service.chat(request)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"vLLM server error: {e}")
+    return BaseResponse.ok(data=response)
+```
 
 ---
 
@@ -218,5 +213,5 @@ result = await service.chat(
 | 파일 | 변경 내용 |
 |------|----------|
 | `modelling/schemas/inference.py` | `Message` 모델 추가, `ChatRequest.prompt` → `messages` 변경, `system_prompt` 제거 |
-| `modelling/services/inference_service.py` | `chat()` 시그니처 변경, messages 조립 로직 제거 |
-| `modelling/api/endpoints/inference.py` | 호출부 `prompt=` → `messages=` 변경 |
+| `modelling/services/inference_service.py` | `chat()` 내부 messages 조립 로직 제거, `request.messages`를 그대로 payload에 전달 |
+| `modelling/api/endpoints/inference.py` | 변경 없음 (`service.chat(request)` 패턴 유지) |

@@ -62,14 +62,9 @@ class InferenceService:
     async def chat(self, request: ChatRequest) -> InferenceResponse:
         model_name = request.model or await self.detect_model()
 
-        messages: list[dict] = []
-        if request.system_prompt:
-            messages.append({"role": "system", "content": request.system_prompt})
-        messages.append({"role": "user", "content": request.prompt})
-
         payload = {
             "model": model_name,
-            "messages": messages,
+            "messages": [m.model_dump() for m in request.messages],
             "max_tokens": request.max_tokens,
             "temperature": request.temperature,
         }
