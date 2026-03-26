@@ -390,26 +390,3 @@ Configuration (환경 기반 설정)
 | `psutil` | 시스템 모니터링 |
 | `nvidia-ml-py` | GPU 모니터링 (NVML) |
 | `rich` | 터미널 대시보드 UI |
-
----
-
-## 문서
-
-### 가이드라인
-
-| 문서 | 설명 |
-|------|------|
-| [llm-serve-architecture.md](markdown/guideline/llm-serve-architecture.md) | 아키텍처 분석 및 설계 패턴 |
-| [fastapi-server-guide.md](markdown/guideline/fastapi-server-guide.md) | FastAPI 서버 구축 가이드 |
-| [tokenizing.md](markdown/guideline/tokenizing.md) | LLM 토큰 샘플링 파이프라인 가이드 |
-| [runpod.md](markdown/guideline/runpod.md) | RunPod 배포 가이드 |
-
-### 작업 이력
-
-| 문서 | 설명 |
-|------|------|
-| [project-restructuring.md](markdown/workhistory/project-restructuring.md) | utils/ → 레이어드 아키텍처 마이그레이션 |
-| [llm-serve-architecture-output.md](markdown/workhistory/llm-serve-architecture-output.md) | 아키텍처 리팩토링 변경 이력 |
-| [resource-monitoring.md](markdown/workhistory/resource-monitoring.md) | 리소스 모니터링 구현 상세 |
-| [data_processing.md](markdown/workhistory/data_processing.md) | 데이터 파이프라인 (v1→v3) 진화 과정 |
-| [migration.md](markdown/workhistory/migration.md) | inference → chat 네이밍 마이그레이션 |
