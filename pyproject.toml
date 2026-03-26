@@ -1,0 +1,19 @@
+[project]
+name = "modelling-testing"
+version = "0.1.0"
+description = "Testing pod: OpenLLM serving and model evaluation on GPU"
+requires-python = ">=3.12"
+dependencies = [
+    "vllm",
+    "transformers>=4.45,<5.0",
+    "huggingface-hub",
+    "hf-transfer",
+    "safetensors",
+    "sentencepiece",
+    "datasets",
+    "requests",
+    "dotenv>=0.9.9",
+    "psutil",
+    "nvidia-ml-py",
+    "rich",
+]
